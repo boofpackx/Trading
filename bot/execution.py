@@ -32,15 +32,37 @@ class ExecutionManager:
         settings: Settings = SETTINGS,
         log: Optional[Callable[[str], None]] = None,
         broker=None,  # ProjectXClient in live mode, None in sim
+        journal=None,  # Journal instance; None disables persistence
+        rebuild_day: Optional[datetime] = None,  # restore guardrails from journal
     ):
         self.s = settings
         self.log = log or (lambda _msg: None)
         self.broker = broker
+        self.journal = journal
         self.guardrails = Guardrails(settings)
         self.stats = DayStats()
         self.staged: Optional[Setup] = None
         self.working: Optional[Setup] = None  # confirmed, waiting for limit fill
         self.position: Optional[Position] = None
+        if journal is not None and rebuild_day is not None:
+            self._rebuild_day_stats(rebuild_day)
+
+    def _rebuild_day_stats(self, day: datetime) -> None:
+        """Restore today's guardrail state from the journal so a mid-session
+        restart cannot forget losses already taken (Topstep safety)."""
+        for rec in self.journal.for_day(day):
+            self.stats.pnl += rec["pnl"]
+            if rec["pnl"] < 0:
+                self.stats.losses += 1
+            elif rec["pnl"] > 0:
+                self.stats.wins += 1
+        self.guardrails.refresh_halt(self.stats)
+        if self.stats.pnl or self.stats.losses or self.stats.wins:
+            self.log(
+                f"restored today's stats from journal: {self.stats.pnl:+.2f}, "
+                f"{self.stats.wins}W-{self.stats.losses}L"
+                + (f" — {self.stats.halt_reason}" if self.stats.halted else "")
+            )
 
     # ------------------------------------------------------------- staging
     def stage(self, setup: Setup, now_et: datetime) -> bool:
@@ -195,8 +217,11 @@ class ExecutionManager:
             pnl=round(pnl, 2),
             reason=reason,
             closed=now_et,
+            risk=round(abs(p.entry - p.stop) * p.point_value * p.contracts, 2),
         )
         self.guardrails.record(self.stats, result)
+        if self.journal is not None:
+            self.journal.append(result, self.s.mode)
         self.position = None
         self.log(
             f"CLOSED #{result.setup_id} {reason} @ {price:.2f} for "

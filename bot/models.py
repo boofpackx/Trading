@@ -104,6 +104,7 @@ class TradeResult:
     pnl: float
     reason: str  # target | stop | flat_close | manual
     closed: datetime
+    risk: float = 0.0  # planned dollar risk (entry-to-stop), for R-multiples
 
 
 @dataclass

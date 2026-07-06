@@ -13,12 +13,14 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
+from . import analytics
 from .config import ET, SETTINGS
 from .data.aggregator import closed_only
 from .data.sim import SimFeed
 from .execution import ExecutionManager
+from .journal import Journal, default_path
 from .models import Candle, SetupState
 from .strategy import fib
 from .strategy.engine import StrategyEngine
@@ -36,12 +38,19 @@ class BotRunner:
             from .data.projectx import ProjectXClient
 
             self.broker = ProjectXClient(self.s)
-        self.exec = ExecutionManager(self.s, log=self._log, broker=self.broker)
+        self.journal = Journal(default_path(self.s.mode))
+        # live guardrails survive restarts; sim starts each run fresh
+        rebuild = datetime.now(ET) if self.s.mode == "live" else None
+        self.exec = ExecutionManager(
+            self.s, log=self._log, broker=self.broker,
+            journal=self.journal, rebuild_day=rebuild,
+        )
         self.nq_1m: list[Candle] = []
         self.es_1m: list[Candle] = []
         self.sim = SimFeed() if self.s.mode == "sim" else None
         self.clock: datetime = datetime.now(ET)
         self.sockets: set[WebSocket] = set()
+        self.speed = 1.0  # sim replay speed multiplier; 0 pauses
         self._last_5m_count = 0
 
     def _log(self, msg: str) -> None:
@@ -69,15 +78,23 @@ class BotRunner:
                 self.broker = None
                 self.exec.broker = None
                 self.sim = SimFeed()
+                # relabel + re-point the journal so paper trades never land
+                # in the live history
+                self.s.mode = "sim"
+                self.journal = Journal(default_path("sim"))
+                self.exec.journal = self.journal
         while True:
             try:
                 if self.sim is not None:
+                    if self.speed <= 0:
+                        await asyncio.sleep(0.3)  # paused
+                        continue
                     nq, es = self.sim.next_minute()
                     self.nq_1m, self.es_1m = self.sim.nq_1m, self.sim.es_1m
                     self.clock = nq.ts
                     self._on_minute(nq)
                     await self._broadcast()
-                    await asyncio.sleep(0.8)  # 1 sim-minute per 0.8s
+                    await asyncio.sleep(0.8 / self.speed)  # 1 sim-minute per tick
                 else:
                     nq_bars = self.broker.recent_1m_bars("NQ")
                     es_bars = self.broker.recent_1m_bars("ES")
@@ -177,6 +194,13 @@ class BotRunner:
                 "max_drawdown": self.s.max_daily_drawdown,
             },
             "events": list(self.events),
+            "speed": self.speed,
+            "analytics": {
+                "summary": analytics.summary(self.journal.records),
+                "monthly": analytics.monthly(self.journal.records),
+                "curve": analytics.equity_curve(self.journal.records),
+                "recent": analytics.recent(self.journal.records),
+            },
         }
 
     def _setup_dict(self, s) -> dict | None:
@@ -294,3 +318,21 @@ async def flatten():
     runner.engine.clear()
     await runner._broadcast()
     return {"ok": True}
+
+
+@app.post("/api/speed")
+async def set_speed(x: float):
+    if runner.sim is None:
+        return {"ok": False, "reason": "speed control is sim-only"}
+    runner.speed = max(0.0, min(x, 16.0))
+    await runner._broadcast()
+    return {"ok": True, "speed": runner.speed}
+
+
+@app.get("/api/journal.csv")
+async def journal_csv():
+    return PlainTextResponse(
+        runner.journal.to_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=journal.csv"},
+    )

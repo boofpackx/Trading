@@ -24,6 +24,27 @@ internal high/low.
 | Contract caps | 5 minis / 50 micros (Topstep 50K scaling) |
 | Execution | bot stages the trade; **you** click Confirm |
 
+## Analytics & journal
+
+Every closed trade is journaled to `journal.<mode>.jsonl` (sim and live kept
+separate) and the **Analytics** tab computes from the full history:
+
+- Total P&L and **return % on the 50K account**, plus **monthly return %** table
+- **Win rate, profit factor, expectancy per trade, average R-multiple**
+- Average win / average loss, best/worst, current streak, **max drawdown**
+- **Equity curve** with per-trade hover, and a trade-history table with
+  R-multiples and exit reasons
+- CSV export at `/api/journal.csv`
+
+In live mode the journal also restores today's stats after a restart, so the
+daily-loss guardrails can't be reset by bouncing the bot mid-session.
+
+## Quality of life
+
+- **Sim speed controls** (pause / 1x / 4x / 10x) in the header
+- **Keyboard shortcuts**: `C` confirm, `S` skip, `F` flatten
+- Browser-tab alert (`● SETUP`) when a trade is staged
+
 ## Live demo on GitHub Pages
 
 `docs/` holds a fully static build of the dashboard that replays a recorded
