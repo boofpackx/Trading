@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ICT NY-AM</title>
+<style>
+  /* E-ink grayscale: paper white, near-black ink, gray tones only. */
+  :root {
+    --paper: #f4f4f2;
+    --ink: #141414;
+    --ink2: #4a4a4a;   /* secondary text */
+    --ink3: #8a8a8a;   /* muted text */
+    --line: #c9c9c6;   /* hairlines */
+    --band: #e3e3e0;   /* fills / zones */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#181818; --ink:#e8e8e6; --ink2:#b0b0ae; --ink3:#7a7a78;
+            --line:#3a3a3a; --band:#262626; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink);
+    font: 14px/1.45 "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; }
+  body { max-width: 880px; margin: 0 auto; padding: 16px; }
+
+  header { display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid var(--ink); padding-bottom: 8px; margin-bottom: 14px;
+    flex-wrap: wrap; gap: 6px; }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: .12em; }
+  header .meta { color: var(--ink2); font-size: 12px; letter-spacing: .06em; }
+  header .meta b { color: var(--ink); font-weight: 700; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px;
+    margin-bottom: 14px; }
+  .tile { border: 1px solid var(--line); padding: 8px 10px; }
+  .tile .k { font-size: 10px; letter-spacing: .14em; color: var(--ink3);
+    text-transform: uppercase; }
+  .tile .v { font-size: 20px; font-weight: 700; margin-top: 2px;
+    font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 11px; color: var(--ink2); }
+
+  section { border: 1px solid var(--line); margin-bottom: 14px; }
+  section > h2 { font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink2); padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  .pad { padding: 10px; }
+
+  #chartwrap { position: relative; }
+  canvas { display: block; width: 100%; height: 240px; }
+  #tip { position: absolute; display: none; pointer-events: none;
+    background: var(--paper); border: 1px solid var(--ink); padding: 3px 7px;
+    font-size: 11px; white-space: nowrap; }
+
+  #setup .row { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-bottom: 10px; }
+  #setup .row div { min-width: 90px; }
+  #setup .k { font-size: 10px; color: var(--ink3); text-transform: uppercase;
+    letter-spacing: .12em; }
+  #setup .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .none { color: var(--ink3); font-style: italic; }
+
+  button { font: inherit; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; padding: 9px 22px; cursor: pointer;
+    background: var(--paper); color: var(--ink); border: 2px solid var(--ink); }
+  button:hover { background: var(--ink); color: var(--paper); }
+  button.ghost { border: 1px solid var(--line); color: var(--ink2); font-weight: 400; }
+  button.ghost:hover { background: var(--band); color: var(--ink); }
+  button:disabled { opacity: .35; cursor: default; }
+  .btnrow { display: flex; gap: 10px; }
+
+  #log { max-height: 210px; overflow-y: auto; font-size: 12px; }
+  #log div { padding: 3px 10px; border-bottom: 1px solid var(--band); }
+  #log .t { color: var(--ink3); margin-right: 10px; }
+
+  .flag { display: inline-block; border: 1px solid var(--ink); padding: 0 6px;
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  .flag.off { border-color: var(--line); color: var(--ink3); }
+
+  footer { color: var(--ink3); font-size: 11px; text-align: center; padding: 6px 0 20px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ICT &middot; NY AM &middot; NQ</h1>
+  <div class="meta">
+    <span id="mode">—</span> &middot; <b id="clock">--:--:--</b> ET &middot;
+    <span id="window" class="flag off">window</span>
+    <span id="halt" class="flag off">halted</span>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="tile"><div class="k">Day P&amp;L</div><div class="v" id="pnl">$0</div>
+    <div class="sub" id="guard">0 losses</div></div>
+  <div class="tile"><div class="k">Record</div><div class="v" id="record">0–0</div>
+    <div class="sub">win–loss</div></div>
+  <div class="tile"><div class="k">Risk / trade</div><div class="v" id="risk">$250</div>
+    <div class="sub">fixed</div></div>
+  <div class="tile"><div class="k">Last</div><div class="v" id="last">—</div>
+    <div class="sub">NQ 1m close</div></div>
+</div>
+
+<section>
+  <h2>NQ &middot; 1 minute &middot; OTE overlay</h2>
+  <div id="chartwrap" class="pad">
+    <canvas id="chart"></canvas>
+    <div id="tip"></div>
+  </div>
+</section>
+
+<section id="setup">
+  <h2>Setup</h2>
+  <div class="pad" id="setupbody"><span class="none">scanning for sweep &rarr; displacement &rarr; OTE&hellip;</span></div>
+</section>
+
+<section id="pos">
+  <h2>Position</h2>
+  <div class="pad" id="posbody"><span class="none">flat</span></div>
+</section>
+
+<section>
+  <h2>Log</h2>
+  <div id="log"></div>
+</section>
+
+<footer>entries 9:30–11:00 ET &middot; flat by <span id="flatby">15:55</span> ET &middot; stop: 2 losses or −$500</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null;
+
+const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+ws.onmessage = e => { S = JSON.parse(e.data); render(); };
+setInterval(() => { if (ws.readyState === 1) ws.send("ping"); }, 15000);
+
+async function post(path) { await fetch(path, { method: "POST" }); }
+
+function money(x) { return (x < 0 ? "−$" : "$") + Math.abs(x).toFixed(0); }
+
+function render() {
+  $("mode").textContent = S.mode.toUpperCase();
+  $("clock").textContent = S.clock;
+  $("flatby").textContent = S.flat_by;
+  $("window").className = "flag" + (S.in_window ? "" : " off");
+  $("halt").style.display = S.stats.halted ? "inline-block" : "none";
+  $("halt").className = "flag";
+
+  $("pnl").textContent = money(S.stats.pnl);
+  $("guard").textContent = S.stats.halted ? S.stats.halt_reason
+    : S.stats.losses + "/" + S.stats.max_losses + " losses · floor −$" + S.stats.max_drawdown;
+  $("record").textContent = S.stats.wins + "–" + S.stats.losses;
+  $("risk").textContent = "$" + S.stats.risk_per_trade;
+  const cs = S.candles;
+  $("last").textContent = cs.length ? cs[cs.length - 1].c.toFixed(2) : "—";
+
+  renderSetup();
+  renderPos();
+  $("log").innerHTML = S.events.map(e =>
+    `<div><span class="t">${e.ts}</span>${esc(e.msg)}</div>`).join("");
+  drawChart();
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function renderSetup() {
+  const s = S.setup, el = $("setupbody");
+  if (!s) {
+    const leg = S.pending_leg;
+    el.innerHTML = leg
+      ? `<span class="none">leg drawn ${leg.leg_start.toFixed(2)} &rarr; ${leg.leg_end.toFixed(2)} (${leg.direction}) — waiting for OTE retrace + SMT&hellip;</span>`
+      : `<span class="none">scanning for sweep &rarr; displacement &rarr; OTE&hellip;</span>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="row">
+      <div><div class="k">Dir</div><div class="v">${s.direction.toUpperCase()}</div></div>
+      <div><div class="k">Size</div><div class="v">${s.contracts} ${s.symbol}</div></div>
+      <div><div class="k">Entry (70.5%)</div><div class="v">${s.entry.toFixed(2)}</div></div>
+      <div><div class="k">Stop</div><div class="v">${s.stop.toFixed(2)}</div></div>
+      <div><div class="k">Target</div><div class="v">${s.target.toFixed(2)}</div></div>
+      <div><div class="k">R:R</div><div class="v">${s.rr}</div></div>
+      <div><div class="k">$ Risk</div><div class="v">${money(s.dollar_risk)}</div></div>
+    </div>
+    <div class="row"><div style="min-width:100%"><div class="k">SMT</div><div>${esc(s.smt)}</div></div></div>
+    <div class="btnrow">
+      <button onclick="post('/api/confirm')">Confirm</button>
+      <button class="ghost" onclick="post('/api/skip')">Skip</button>
+    </div>`;
+}
+
+function renderPos() {
+  const p = S.position, el = $("posbody");
+  if (!p) { el.innerHTML = `<span class="none">flat</span>`; return; }
+  el.innerHTML = `
+    <div class="row" style="display:flex;flex-wrap:wrap;gap:4px 22px;margin-bottom:10px">
+      <div><div class="k">Status</div><div class="v">${p.status.toUpperCase()}</div></div>
+      <div><div class="k">Dir</div><div class="v">${p.direction.toUpperCase()}</div></div>
+      <div><div class="k">Size</div><div class="v">${p.contracts} ${p.symbol}</div></div>
+      <div><div class="k">Entry</div><div class="v">${p.entry.toFixed(2)}</div></div>
+      <div><div class="k">Stop</div><div class="v">${p.stop.toFixed(2)}</div></div>
+      <div><div class="k">Target</div><div class="v">${p.target.toFixed(2)}</div></div>
+      <div><div class="k">Unrl</div><div class="v">${money(p.unrealized)}</div></div>
+    </div>
+    <div class="btnrow"><button class="ghost" onclick="post('/api/flatten')">Flatten now</button></div>`;
+  // reuse .k/.v styles from #setup
+  el.querySelectorAll(".k").forEach(k => { k.style.fontSize = "10px"; k.style.color = "var(--ink3)";
+    k.style.textTransform = "uppercase"; k.style.letterSpacing = ".12em"; });
+  el.querySelectorAll(".v").forEach(v => { v.style.fontWeight = "700"; });
+}
+
+/* ------------------------------------------------ chart (canvas, grayscale) */
+const canvas = $("chart"), tip = $("tip");
+let hoverX = null;
+
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function drawChart() {
+  if (!S || !S.candles.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  const ink = cssVar("--ink"), ink2 = cssVar("--ink2"), ink3 = cssVar("--ink3"),
+        line = cssVar("--line"), band = cssVar("--band");
+  const cs = S.candles;
+  const padL = 6, padR = 64, padT = 8, padB = 18;
+  const pw = W - padL - padR, ph = H - padT - padB;
+
+  let lo = Math.min(...cs.map(c => c.l)), hi = Math.max(...cs.map(c => c.h));
+  const ov = S.setup || S.pending_leg;
+  if (ov) { lo = Math.min(lo, ov.stop); hi = Math.max(hi, ov.target); }
+  const span = (hi - lo) || 1; lo -= span * .04; hi += span * .04;
+
+  const x = i => padL + (i + .5) / cs.length * pw;
+  const y = p => padT + (hi - p) / (hi - lo) * ph;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // recessive horizontal grid: 4 lines + right-edge price labels,
+  // skipping labels that would collide with the E/S/T level labels
+  const levelYs = ov ? [ov.entry, ov.stop, ov.target].map(y) : [];
+  ctx.strokeStyle = line; ctx.fillStyle = ink3;
+  ctx.font = "10px monospace"; ctx.textAlign = "left"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + (hi - lo) * i / 4, yy = y(p);
+    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
+    if (!levelYs.some(ly => Math.abs(ly - yy) < 11))
+      ctx.fillText(p.toFixed(0), W - padR + 6, yy + 3);
+  }
+
+  // OTE band + levels
+  if (ov) {
+    const zTop = y(ov.ote_upper), zBot = y(ov.ote_lower);
+    ctx.fillStyle = band;
+    ctx.fillRect(padL, Math.min(zTop, zBot), pw, Math.abs(zBot - zTop));
+    ctx.fillStyle = ink3; ctx.textAlign = "left";
+    ctx.fillText("OTE", padL + 4, Math.min(zTop, zBot) + 10);
+
+    const lvl = (p, label, dash, color) => {
+      ctx.strokeStyle = color; ctx.setLineDash(dash); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, y(p)); ctx.lineTo(W - padR, y(p)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color; ctx.fillText(label + " " + p.toFixed(2), W - padR + 6, y(p) + 3);
+    };
+    lvl(ov.entry, "E", [5, 3], ink2);
+    lvl(ov.stop, "S", [2, 3], ink2);
+    lvl(ov.target, "T", [7, 3], ink2);
+  }
+
+  // price line: 2px ink, single series (title names it; no legend needed)
+  ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath();
+  cs.forEach((c, i) => { i ? ctx.lineTo(x(i), y(c.c)) : ctx.moveTo(x(i), y(c.c)); });
+  ctx.stroke();
+
+  // per-candle high/low whiskers, thin & recessive
+  ctx.strokeStyle = ink3; ctx.lineWidth = 1; ctx.globalAlpha = .5;
+  cs.forEach((c, i) => {
+    ctx.beginPath(); ctx.moveTo(x(i), y(c.h)); ctx.lineTo(x(i), y(c.l)); ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  // x labels: first / middle / last time
+  ctx.fillStyle = ink3; ctx.textAlign = "center";
+  [0, Math.floor(cs.length / 2), cs.length - 1].forEach(i =>
+    ctx.fillText(cs[i].t, Math.min(Math.max(x(i), 18), W - padR - 14), H - 5));
+
+  // crosshair
+  if (hoverX !== null) {
+    const i = Math.max(0, Math.min(cs.length - 1,
+      Math.round((hoverX - padL) / pw * cs.length - .5)));
+    ctx.strokeStyle = ink2; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(x(i), padT); ctx.lineTo(x(i), padT + ph); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.arc(x(i), y(cs[i].c), 3, 0, 7); ctx.fill();
+    const c = cs[i];
+    tip.style.display = "block";
+    tip.innerHTML = `<b>${c.t}</b> O ${c.o.toFixed(2)} H ${c.h.toFixed(2)} L ${c.l.toFixed(2)} C ${c.c.toFixed(2)}`;
+    const wrap = canvas.parentElement.getBoundingClientRect();
+    let tx = x(i) + 14; if (tx + tip.offsetWidth > wrap.width - 8) tx = x(i) - tip.offsetWidth - 14;
+    tip.style.left = tx + "px"; tip.style.top = Math.max(4, y(c.c) - 28) + "px";
+  } else tip.style.display = "none";
+}
+
+canvas.addEventListener("mousemove", e => {
+  hoverX = e.offsetX; drawChart();
+});
+canvas.addEventListener("mouseleave", () => { hoverX = null; drawChart(); });
+window.addEventListener("resize", drawChart);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawChart);
+</script>
+</body>
+</html>
