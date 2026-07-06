@@ -9,8 +9,11 @@ The model, per ICT's NY AM playbook, long side (shorts mirrored):
    running high of that displacement.
 3. Fib the leg: wait for a 1m retracement into the OTE band (61.8-79%).
 4. SMT filter: NQ vs ES must show divergence at the raid.
-5. Target the nearest unswept internal 5m swing high; stop a few ticks below
-   the sweep extreme; require reward >= min_rr * risk after sizing to $250.
+5. Take profit: in "fixed" mode the target lands 30-50 points from entry
+   (the internal swing level is used when it falls inside that band, else
+   the distance is clamped to it); in "internal" mode it sits exactly at the
+   nearest unswept internal 5m swing. Stop goes a few ticks beyond the sweep
+   extreme; reward must be >= min_rr * risk after sizing to $250.
 
 A qualifying setup is emitted as READY and staged for one-click confirmation;
 it invalidates if price trades through the leg origin first.
@@ -34,6 +37,27 @@ from .structure import (
     structure_shift_down,
     structure_shift_up,
 )
+
+
+def resolve_target(
+    entry: float,
+    level_price: Optional[float],
+    direction: Direction,
+    settings: Settings,
+    tick: float = NQ.tick_size,
+) -> Optional[float]:
+    """Take-profit price per settings.target_mode (see module docstring)."""
+    sign = 1 if direction is Direction.LONG else -1
+    if settings.target_mode == "internal":
+        return level_price  # may be None -> no trade
+
+    lo, hi = settings.fixed_target_min, settings.fixed_target_max
+    if level_price is None:
+        dist = (lo + hi) / 2
+    else:
+        dist = min(max((level_price - entry) * sign, lo), hi)
+    price = entry + sign * dist
+    return round(price / tick) * tick
 
 
 class StrategyEngine:
@@ -108,9 +132,14 @@ class StrategyEngine:
             if direction is Direction.LONG
             else nearest_internal_low(swings, leg_end)
         )
-        if target_swing is None:
-            return None  # no internal liquidity left to draw on
-        target = target_swing.price
+        target = resolve_target(
+            entry,
+            target_swing.price if target_swing else None,
+            direction,
+            self.s,
+        )
+        if target is None:
+            return None  # internal mode with no liquidity left to draw on
 
         risk_pts = abs(entry - stop)
         reward_pts = abs(target - entry)

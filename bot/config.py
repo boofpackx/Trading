@@ -50,6 +50,14 @@ class Settings:
     max_minis: int = 5
     max_micros: int = 50
 
+    # --- take profit ---
+    # "fixed": TP lands 30-50 NQ points from entry — the internal high/low is
+    #          used when it falls inside that band, else clamped to it.
+    # "internal": TP at the nearest unswept internal high/low (classic).
+    target_mode: str = "fixed"
+    fixed_target_min: float = 30.0   # points
+    fixed_target_max: float = 50.0   # points
+
     # --- strategy ---
     swing_lookback: int = 2          # fractal width on 5m structure
     ote_low: float = 0.618           # OTE retracement zone bounds

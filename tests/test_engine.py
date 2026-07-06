@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from bot.config import ET, Settings
 from bot.models import Candle, Direction, SetupState
-from bot.strategy.engine import StrategyEngine
+from bot.strategy.engine import StrategyEngine, resolve_target
 
 T0 = datetime(2026, 7, 6, 9, 30, tzinfo=ET)
 
@@ -50,7 +50,8 @@ def test_engine_full_long_setup():
     assert p.leg_start == 19970.0  # the sweep extreme
     assert p.leg_end == 20065.0
     assert p.stop == 19970.0 - 1.0  # 4 ticks * 0.25 buffer
-    assert p.target == 20090.0     # nearest unswept internal high
+    # internal high (20090) is 92 pts from entry -> clamped to the 50-pt cap
+    assert p.target == p.entry + 50.0
     assert p.rr >= s.min_rr
     assert p.state is SetupState.AWAITING_RETRACE
 
@@ -71,6 +72,38 @@ def test_engine_full_long_setup():
     assert ready.state is SetupState.READY
     assert "SMT" in ready.smt_note
     assert ready.contracts >= 1
+
+
+def test_resolve_target_fixed_band():
+    s = Settings()  # fixed mode, 30-50 pts
+    # level inside the band -> target sits on the liquidity
+    assert resolve_target(20000.0, 20042.0, Direction.LONG, s) == 20042.0
+    # level beyond the cap -> clamped to 50
+    assert resolve_target(20000.0, 20092.0, Direction.LONG, s) == 20050.0
+    # level too close -> floored at 30
+    assert resolve_target(20000.0, 20012.0, Direction.LONG, s) == 20030.0
+    # no liquidity level -> band midpoint (40)
+    assert resolve_target(20000.0, None, Direction.LONG, s) == 20040.0
+    # shorts mirror
+    assert resolve_target(20000.0, 19908.0, Direction.SHORT, s) == 19950.0
+    assert resolve_target(20000.0, 19965.0, Direction.SHORT, s) == 19965.0
+
+
+def test_resolve_target_internal_mode():
+    s = Settings()
+    s.target_mode = "internal"
+    assert resolve_target(20000.0, 20092.0, Direction.LONG, s) == 20092.0
+    assert resolve_target(20000.0, None, Direction.LONG, s) is None
+
+
+def test_engine_internal_mode_still_targets_liquidity():
+    s = Settings()
+    s.smt_window = 10
+    s.target_mode = "internal"
+    eng = StrategyEngine(s)
+    eng.on_structure_candle(build_5m())
+    assert eng.pending is not None
+    assert eng.pending.target == 20090.0  # the unswept internal high
 
 
 def test_engine_invalidates_on_leg_violation():

@@ -16,7 +16,8 @@ internal high/low.
 | Flat before close | everything force-closed by 15:55 ET |
 | Structure / entry | 5-minute structure, 1-minute entries |
 | Risk per trade | $250 fixed — sized in NQ minis, falls back to MNQ micros |
-| Minimum R:R | 1:1 against the internal-liquidity target |
+| Minimum R:R | 1:1 against the take-profit |
+| Take profit | 30–50 NQ points from entry (internal high/low used when inside the band, else clamped); classic internal-liquidity targeting via `target_mode="internal"` |
 | Entry | limit at the 70.5% OTE sweet spot of the impulse leg |
 | Stop | 4 ticks beyond the sweep extreme |
 | SMT filter | NQ vs ES divergence required at the raid |
