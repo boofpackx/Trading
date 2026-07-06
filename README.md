@@ -25,6 +25,23 @@ internal high/low.
 | Contract caps | 5 minis / 50 micros (Topstep 50K scaling) |
 | Execution | bot stages the trade; **you** click Confirm |
 
+## Backtesting
+
+```bash
+# real NQ/ES 1m data via ProjectX history API (needs .env credentials)
+python -m bot.backtest --start 2025-01-01 --end 2025-12-31
+
+# no credentials: synthetic sessions (machinery check, NOT market results)
+python -m bot.backtest --synthetic 252
+```
+
+Replays each historical NY AM session through the exact same engine,
+execution, and guardrail stack with auto-confirm, then prints monthly
+returns, win rate, profit factor, expectancy, and max drawdown. Quarterly
+contracts are resolved by date (mid-month roll approximation); pin ids
+explicitly with `--contract-nq/--contract-es` if needed. History depth for
+expired contracts depends on the data provider — skipped days are reported.
+
 ## Analytics & journal
 
 Every closed trade is journaled to `journal.<mode>.jsonl` (sim and live kept

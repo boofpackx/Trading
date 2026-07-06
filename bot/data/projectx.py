@@ -89,19 +89,20 @@ class ProjectXClient:
         return match["id"]
 
     # ---------------------------------------------------------------- data
-    def recent_1m_bars(self, symbol: str, minutes: int = 240) -> list[Candle]:
-        contract_id = self.resolve_contract(symbol)
-        now = datetime.now(timezone.utc)
+    def bars_between(
+        self, contract_id: str, start: datetime, end: datetime
+    ) -> list[Candle]:
+        """1m bars for an explicit contract id and UTC/aware time range."""
         data = self._post(
             "/api/History/retrieveBars",
             {
                 "contractId": contract_id,
                 "live": False,
-                "startTime": (now - timedelta(minutes=minutes)).isoformat(),
-                "endTime": now.isoformat(),
+                "startTime": start.isoformat(),
+                "endTime": end.isoformat(),
                 "unit": 2,  # minute
                 "unitNumber": 1,
-                "limit": minutes,
+                "limit": 20000,
                 "includePartialBar": False,
             },
         )
@@ -118,6 +119,11 @@ class ProjectXClient:
         ]
         out.sort(key=lambda c: c.ts)
         return out
+
+    def recent_1m_bars(self, symbol: str, minutes: int = 240) -> list[Candle]:
+        contract_id = self.resolve_contract(symbol)
+        now = datetime.now(timezone.utc)
+        return self.bars_between(contract_id, now - timedelta(minutes=minutes), now)
 
     # -------------------------------------------------------------- orders
     def place_bracket(

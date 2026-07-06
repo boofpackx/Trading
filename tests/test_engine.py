@@ -74,6 +74,17 @@ def test_engine_full_long_setup():
     assert ready.contracts >= 1
 
 
+def test_backtest_contract_roll():
+    from datetime import date
+    from bot.backtest import contract_for
+
+    assert contract_for("NQ", date(2025, 1, 10)) == "CON.F.US.ENQ.H25"
+    assert contract_for("NQ", date(2025, 3, 10)) == "CON.F.US.ENQ.H25"
+    assert contract_for("NQ", date(2025, 3, 20)) == "CON.F.US.ENQ.M25"  # rolled
+    assert contract_for("ES", date(2025, 7, 1)) == "CON.F.US.EP.U25"
+    assert contract_for("ES", date(2025, 12, 20)) == "CON.F.US.EP.H26"  # year wrap
+
+
 def test_resolve_target_fixed_band():
     s = Settings()  # fixed mode, 30-50 pts
     # level inside the band -> target sits on the liquidity
