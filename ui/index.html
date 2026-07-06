@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ICT NY-AM</title>
+<style>
+  /* E-ink grayscale: paper white, near-black ink, gray tones only. */
+  :root {
+    --paper: #f4f4f2;
+    --ink: #141414;
+    --ink2: #4a4a4a;   /* secondary text */
+    --ink3: #8a8a8a;   /* muted text */
+    --line: #c9c9c6;   /* hairlines */
+    --band: #e3e3e0;   /* fills / zones */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#181818; --ink:#e8e8e6; --ink2:#b0b0ae; --ink3:#7a7a78;
+            --line:#3a3a3a; --band:#262626; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink);
+    font: 14px/1.45 "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; }
+  body { max-width: 880px; margin: 0 auto; padding: 16px; }
+
+  header { display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid var(--ink); padding-bottom: 8px;
+    flex-wrap: wrap; gap: 6px; }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: .12em; }
+  header .meta { color: var(--ink2); font-size: 12px; letter-spacing: .06em; }
+  header .meta b { color: var(--ink); font-weight: 700; }
+
+  nav { display: flex; justify-content: space-between; align-items: center;
+    margin: 10px 0 14px; flex-wrap: wrap; gap: 8px; }
+  nav .tabs { display: flex; gap: 0; }
+  nav .tabs button { border: 1px solid var(--line); border-right: none;
+    padding: 5px 16px; font-size: 11px; }
+  nav .tabs button:last-child { border-right: 1px solid var(--line); }
+  nav .tabs button.on { background: var(--ink); color: var(--paper);
+    border-color: var(--ink); }
+  nav .speed { display: flex; gap: 0; align-items: center; }
+  nav .speed span { font-size: 10px; color: var(--ink3); letter-spacing: .14em;
+    margin-right: 8px; text-transform: uppercase; }
+  nav .speed button { border: 1px solid var(--line); border-right: none;
+    padding: 5px 10px; font-size: 11px; font-weight: 400; }
+  nav .speed button:last-child { border-right: 1px solid var(--line); }
+  nav .speed button.on { background: var(--band); font-weight: 700; }
+
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    margin-bottom: 14px; }
+  .grid.six { grid-template-columns: repeat(6, 1fr); }
+  .tile { border: 1px solid var(--line); padding: 8px 10px; }
+  .tile .k { font-size: 10px; letter-spacing: .14em; color: var(--ink3);
+    text-transform: uppercase; }
+  .tile .v { font-size: 20px; font-weight: 700; margin-top: 2px;
+    font-variant-numeric: tabular-nums; }
+  .grid.six .tile .v { font-size: 17px; }
+  .tile .sub { font-size: 11px; color: var(--ink2); }
+
+  section { border: 1px solid var(--line); margin-bottom: 14px; }
+  section > h2 { font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink2); padding: 6px 10px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; }
+  section > h2 a { color: var(--ink2); }
+  .pad { padding: 10px; }
+
+  .chartwrap { position: relative; }
+  canvas { display: block; width: 100%; height: 240px; }
+  #eqchart { height: 190px; }
+  .tipbox { position: absolute; display: none; pointer-events: none;
+    background: var(--paper); border: 1px solid var(--ink); padding: 3px 7px;
+    font-size: 11px; white-space: nowrap; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-bottom: 10px; }
+  .row .k { font-size: 10px; color: var(--ink3); text-transform: uppercase;
+    letter-spacing: .12em; }
+  .row .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .none { color: var(--ink3); font-style: italic; }
+
+  button { font: inherit; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; padding: 9px 22px; cursor: pointer;
+    background: var(--paper); color: var(--ink); border: 2px solid var(--ink); }
+  button:hover { background: var(--ink); color: var(--paper); }
+  button.ghost { border: 1px solid var(--line); color: var(--ink2); font-weight: 400; }
+  button.ghost:hover { background: var(--band); color: var(--ink); }
+  nav button { font-weight: 400; padding: 5px 12px; background: var(--paper);
+    color: var(--ink2); }
+  nav button:hover { background: var(--band); color: var(--ink); }
+  .btnrow { display: flex; gap: 10px; }
+  kbd { border: 1px solid var(--line); padding: 0 4px; font-size: 10px;
+    color: var(--ink3); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px;
+    font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--band); }
+  th { font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--ink3); font-weight: 400; }
+  th:first-child, td:first-child { text-align: left; }
+  .scroll { overflow-x: auto; }
+
+  #log { max-height: 210px; overflow-y: auto; font-size: 12px; }
+  #log div { padding: 3px 10px; border-bottom: 1px solid var(--band); }
+  #log .t { color: var(--ink3); margin-right: 10px; }
+
+  .flag { display: inline-block; border: 1px solid var(--ink); padding: 0 6px;
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  .flag.off { border-color: var(--line); color: var(--ink3); }
+
+  footer { color: var(--ink3); font-size: 11px; text-align: center; padding: 6px 0 20px; }
+  @media (max-width: 700px) { .grid, .grid.six { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ICT &middot; NY AM &middot; NQ</h1>
+  <div class="meta">
+    <span id="mode">—</span> &middot; <b id="clock">--:--:--</b> ET &middot;
+    <span id="window" class="flag off">window</span>
+    <span id="halt" class="flag off">halted</span>
+  </div>
+</header>
+
+<nav>
+  <div class="tabs">
+    <button id="tab-session" class="on" onclick="setView('session')">Session</button>
+    <button id="tab-analytics" onclick="setView('analytics')">Analytics</button>
+  </div>
+  <div class="speed" id="speedctl" style="display:none">
+    <span>speed</span>
+    <button data-x="0">&#10073;&#10073;</button>
+    <button data-x="1" class="on">1&times;</button>
+    <button data-x="4">4&times;</button>
+    <button data-x="10">10&times;</button>
+  </div>
+</nav>
+
+<div id="view-session">
+  <div class="grid">
+    <div class="tile"><div class="k">Day P&amp;L</div><div class="v" id="pnl">$0</div>
+      <div class="sub" id="guard">0 losses</div></div>
+    <div class="tile"><div class="k">Record</div><div class="v" id="record">0–0</div>
+      <div class="sub">win–loss today</div></div>
+    <div class="tile"><div class="k">Risk / trade</div><div class="v" id="risk">$250</div>
+      <div class="sub">fixed</div></div>
+    <div class="tile"><div class="k">Last</div><div class="v" id="last">—</div>
+      <div class="sub">NQ 1m close</div></div>
+  </div>
+
+  <section>
+    <h2>NQ &middot; 1 minute &middot; OTE overlay</h2>
+    <div class="chartwrap pad">
+      <canvas id="chart"></canvas>
+      <div id="tip" class="tipbox"></div>
+    </div>
+  </section>
+
+  <section id="setup">
+    <h2>Setup</h2>
+    <div class="pad" id="setupbody"><span class="none">scanning&hellip;</span></div>
+  </section>
+
+  <section id="pos">
+    <h2>Position</h2>
+    <div class="pad" id="posbody"><span class="none">flat</span></div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </section>
+</div>
+
+<div id="view-analytics" style="display:none">
+  <div class="grid six">
+    <div class="tile"><div class="k">Total P&amp;L</div><div class="v" id="a-pnl">—</div>
+      <div class="sub" id="a-ret">— on 50K</div></div>
+    <div class="tile"><div class="k">Win rate</div><div class="v" id="a-wr">—</div>
+      <div class="sub" id="a-n">0 trades</div></div>
+    <div class="tile"><div class="k">Profit factor</div><div class="v" id="a-pf">—</div>
+      <div class="sub">gross win / loss</div></div>
+    <div class="tile"><div class="k">Expectancy</div><div class="v" id="a-exp">—</div>
+      <div class="sub" id="a-avgr">per trade</div></div>
+    <div class="tile"><div class="k">Max drawdown</div><div class="v" id="a-dd">—</div>
+      <div class="sub">equity peak to trough</div></div>
+    <div class="tile"><div class="k">This month</div><div class="v" id="a-month">—</div>
+      <div class="sub" id="a-monthpnl">return on account</div></div>
+  </div>
+
+  <section>
+    <h2>Equity curve <span id="a-avgwl"></span></h2>
+    <div class="chartwrap pad">
+      <canvas id="eqchart"></canvas>
+      <div id="eqtip" class="tipbox"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Monthly returns</h2>
+    <div class="scroll"><table id="monthly">
+      <thead><tr><th>Month</th><th>Trades</th><th>Win %</th><th>P&amp;L</th><th>Return %</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Trade history <a id="csv" href="/api/journal.csv">export csv</a></h2>
+    <div class="scroll"><table id="history">
+      <thead><tr><th>Closed</th><th>Dir</th><th>Size</th><th>Entry</th><th>Exit</th>
+        <th>Exit via</th><th>R</th><th>P&amp;L</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+</div>
+
+<footer>entries 9:30–11:00 ET &middot; flat by <span id="flatby">15:55</span> ET &middot;
+  stop: 2 losses or −$500 &middot; <kbd>C</kbd> confirm <kbd>S</kbd> skip <kbd>F</kbd> flatten</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null, view = "session";
+const DEMO = !!window.DEMO_FRAMES;
+
+if (DEMO) {
+  // GitHub Pages build: replay a recorded sim session, looping
+  let i = 0;
+  setInterval(() => {
+    S = window.DEMO_FRAMES[i];
+    i = (i + 1) % window.DEMO_FRAMES.length;
+    render();
+  }, 450);
+  $("csv").style.display = "none";
+} else {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onmessage = e => { S = JSON.parse(e.data); render(); };
+  setInterval(() => { if (ws.readyState === 1) ws.send("ping"); }, 15000);
+}
+
+async function post(path) { if (!DEMO) await fetch(path, { method: "POST" }); }
+
+function setView(v) {
+  view = v;
+  $("view-session").style.display = v === "session" ? "" : "none";
+  $("view-analytics").style.display = v === "analytics" ? "" : "none";
+  $("tab-session").className = v === "session" ? "on" : "";
+  $("tab-analytics").className = v === "analytics" ? "on" : "";
+  if (S) render();
+}
+
+document.querySelectorAll("#speedctl button").forEach(b =>
+  b.onclick = () => post("/api/speed?x=" + b.dataset.x));
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || DEMO) return;
+  const k = e.key.toLowerCase();
+  if (k === "c" && S && S.setup) post("/api/confirm");
+  if (k === "s" && S && S.setup) post("/api/skip");
+  if (k === "f") post("/api/flatten");
+});
+
+function money(x) { return (x < 0 ? "−$" : "$") + Math.abs(x).toFixed(0); }
+function pct(x) { return (x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + "%"; }
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function render() {
+  $("mode").textContent = DEMO ? "DEMO REPLAY" : S.mode.toUpperCase();
+  $("clock").textContent = S.clock;
+  $("flatby").textContent = S.flat_by;
+  $("window").className = "flag" + (S.in_window ? "" : " off");
+  $("halt").style.display = S.stats.halted ? "inline-block" : "none";
+  $("halt").className = "flag";
+  document.title = (S.setup ? "● SETUP · " : "") + "ICT NY-AM";
+
+  if (!DEMO && S.mode === "sim") {
+    $("speedctl").style.display = "flex";
+    document.querySelectorAll("#speedctl button").forEach(b =>
+      b.className = +b.dataset.x === S.speed ? "on" : "");
+  }
+
+  $("pnl").textContent = money(S.stats.pnl);
+  $("guard").textContent = S.stats.halted ? S.stats.halt_reason
+    : S.stats.losses + "/" + S.stats.max_losses + " losses · floor −$" + S.stats.max_drawdown;
+  $("record").textContent = S.stats.wins + "–" + S.stats.losses;
+  $("risk").textContent = "$" + S.stats.risk_per_trade;
+  const cs = S.candles;
+  $("last").textContent = cs.length ? cs[cs.length - 1].c.toFixed(2) : "—";
+
+  if (view === "session") {
+    renderSetup();
+    renderPos();
+    $("log").innerHTML = S.events.map(e =>
+      `<div><span class="t">${e.ts}</span>${esc(e.msg)}</div>`).join("");
+    drawChart();
+  } else {
+    renderAnalytics();
+  }
+}
+
+function renderSetup() {
+  const s = S.setup, el = $("setupbody");
+  if (!s) {
+    const leg = S.pending_leg;
+    let msg = `scanning for sweep &rarr; displacement &rarr; OTE&hellip;`;
+    if (leg && leg.kind === "position")
+      msg = `in trade — managing to target/stop`;
+    else if (leg && leg.state === "confirmed")
+      msg = `order working at ${leg.entry.toFixed(2)} — waiting for fill`;
+    else if (leg)
+      msg = `leg drawn ${leg.leg_start.toFixed(2)} &rarr; ${leg.leg_end.toFixed(2)} (${leg.direction}) — waiting for OTE retrace + SMT&hellip;`;
+    el.innerHTML = `<span class="none">${msg}</span>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="row">
+      <div><div class="k">Dir</div><div class="v">${s.direction.toUpperCase()}</div></div>
+      <div><div class="k">Size</div><div class="v">${s.contracts} ${s.symbol}</div></div>
+      <div><div class="k">Entry (70.5%)</div><div class="v">${s.entry.toFixed(2)}</div></div>
+      <div><div class="k">Stop</div><div class="v">${s.stop.toFixed(2)}</div></div>
+      <div><div class="k">Target</div><div class="v">${s.target.toFixed(2)}</div></div>
+      <div><div class="k">R:R</div><div class="v">${s.rr}</div></div>
+      <div><div class="k">$ Risk</div><div class="v">${money(s.dollar_risk)}</div></div>
+    </div>
+    <div class="row"><div style="min-width:100%"><div class="k">SMT</div><div>${esc(s.smt)}</div></div></div>
+    <div class="btnrow">
+      <button onclick="post('/api/confirm')">Confirm</button>
+      <button class="ghost" onclick="post('/api/skip')">Skip</button>
+    </div>`;
+}
+
+function renderPos() {
+  const p = S.position, el = $("posbody");
+  if (!p) { el.innerHTML = `<span class="none">flat</span>`; return; }
+  el.innerHTML = `
+    <div class="row">
+      <div><div class="k">Status</div><div class="v">${p.status.toUpperCase()}</div></div>
+      <div><div class="k">Dir</div><div class="v">${p.direction.toUpperCase()}</div></div>
+      <div><div class="k">Size</div><div class="v">${p.contracts} ${p.symbol}</div></div>
+      <div><div class="k">Entry</div><div class="v">${p.entry.toFixed(2)}</div></div>
+      <div><div class="k">Stop</div><div class="v">${p.stop.toFixed(2)}</div></div>
+      <div><div class="k">Target</div><div class="v">${p.target.toFixed(2)}</div></div>
+      <div><div class="k">Unrl</div><div class="v">${money(p.unrealized)}</div></div>
+    </div>
+    <div class="btnrow"><button class="ghost" onclick="post('/api/flatten')">Flatten now</button></div>`;
+}
+
+/* ------------------------------------------------------------- analytics */
+function renderAnalytics() {
+  const a = S.analytics; if (!a) return;
+  const s = a.summary;
+  $("a-pnl").textContent = money(s.pnl);
+  $("a-ret").textContent = pct(s.return_pct) + " on 50K";
+  $("a-wr").textContent = s.win_rate === null ? "—" : s.win_rate.toFixed(1) + "%";
+  $("a-n").textContent = s.trades + " trades" +
+    (s.streak ? " · " + Math.abs(s.streak) + (s.streak > 0 ? "W" : "L") + " streak" : "");
+  $("a-pf").textContent = s.profit_factor === null ? "—" : s.profit_factor.toFixed(2);
+  $("a-exp").textContent = s.expectancy === null ? "—" : money(s.expectancy);
+  $("a-avgr").textContent = s.avg_r === null ? "per trade" : "avg " + s.avg_r.toFixed(2) + "R";
+  $("a-dd").textContent = money(-s.max_drawdown);
+  $("a-avgwl").textContent = (s.avg_win !== null && s.avg_loss !== null)
+    ? `avg win ${money(s.avg_win)} · avg loss ${money(s.avg_loss)}` : "";
+
+  const months = a.monthly, curM = months[months.length - 1];
+  $("a-month").textContent = curM ? pct(curM.return_pct) : "—";
+  $("a-monthpnl").textContent = curM ? money(curM.pnl) + " · " + curM.trades + " trades" : "return on account";
+
+  $("monthly").querySelector("tbody").innerHTML = months.slice().reverse().map(m =>
+    `<tr><td>${m.month}</td><td>${m.trades}</td><td>${m.win_rate.toFixed(1)}%</td>
+     <td>${money(m.pnl)}</td><td>${pct(m.return_pct)}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="none">no trades yet</td></tr>`;
+
+  $("history").querySelector("tbody").innerHTML = a.recent.map(t =>
+    `<tr><td>${t.closed}</td><td>${t.direction === "long" ? "L" : "S"}</td>
+     <td>${t.contracts} ${t.symbol}</td><td>${t.entry.toFixed(2)}</td>
+     <td>${t.exit.toFixed(2)}</td><td>${t.reason}</td>
+     <td>${t.r === null ? "—" : t.r.toFixed(2)}</td><td>${money(t.pnl)}</td></tr>`).join("")
+    || `<tr><td colspan="8" class="none">no trades yet</td></tr>`;
+
+  drawEquity();
+}
+
+/* ------------------------------------------------ charts (canvas, grayscale) */
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  return { ctx, W, H };
+}
+
+const canvas = $("chart"), tip = $("tip");
+let hoverX = null;
+
+function drawChart() {
+  if (!S || !S.candles.length || view !== "session") return;
+  const { ctx, W, H } = setupCanvas(canvas);
+  const ink = cssVar("--ink"), ink2 = cssVar("--ink2"), ink3 = cssVar("--ink3"),
+        line = cssVar("--line"), band = cssVar("--band");
+  const cs = S.candles;
+  const padL = 6, padR = 64, padT = 8, padB = 18;
+  const pw = W - padL - padR, ph = H - padT - padB;
+
+  let lo = Math.min(...cs.map(c => c.l)), hi = Math.max(...cs.map(c => c.h));
+  const ov = S.setup || S.pending_leg;
+  if (ov) { lo = Math.min(lo, ov.stop); hi = Math.max(hi, ov.target); }
+  const span = (hi - lo) || 1; lo -= span * .04; hi += span * .04;
+
+  const x = i => padL + (i + .5) / cs.length * pw;
+  const y = p => padT + (hi - p) / (hi - lo) * ph;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // recessive horizontal grid: 4 lines + right-edge price labels,
+  // skipping labels that would collide with the E/S/T level labels
+  const levelYs = ov ? [ov.entry, ov.stop, ov.target].map(y) : [];
+  ctx.strokeStyle = line; ctx.fillStyle = ink3;
+  ctx.font = "10px monospace"; ctx.textAlign = "left"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + (hi - lo) * i / 4, yy = y(p);
+    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
+    if (!levelYs.some(ly => Math.abs(ly - yy) < 11))
+      ctx.fillText(p.toFixed(0), W - padR + 6, yy + 3);
+  }
+
+  // OTE band + levels (band collapses to nothing once in a position)
+  if (ov) {
+    if (ov.ote_upper !== ov.ote_lower) {
+      const zTop = y(ov.ote_upper), zBot = y(ov.ote_lower);
+      ctx.fillStyle = band;
+      ctx.fillRect(padL, Math.min(zTop, zBot), pw, Math.abs(zBot - zTop));
+      ctx.fillStyle = ink3; ctx.textAlign = "left";
+      ctx.fillText("OTE", padL + 4, Math.min(zTop, zBot) + 10);
+    }
+
+    const lvl = (p, label, dash) => {
+      ctx.strokeStyle = ink2; ctx.setLineDash(dash); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, y(p)); ctx.lineTo(W - padR, y(p)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = ink2; ctx.fillText(label + " " + p.toFixed(2), W - padR + 6, y(p) + 3);
+    };
+    lvl(ov.entry, "E", [5, 3]);
+    lvl(ov.stop, "S", [2, 3]);
+    lvl(ov.target, "T", [7, 3]);
+  }
+
+  // price line: 2px ink, single series (title names it; no legend needed)
+  ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath();
+  cs.forEach((c, i) => { i ? ctx.lineTo(x(i), y(c.c)) : ctx.moveTo(x(i), y(c.c)); });
+  ctx.stroke();
+
+  // per-candle high/low whiskers, thin & recessive
+  ctx.strokeStyle = ink3; ctx.lineWidth = 1; ctx.globalAlpha = .5;
+  cs.forEach((c, i) => {
+    ctx.beginPath(); ctx.moveTo(x(i), y(c.h)); ctx.lineTo(x(i), y(c.l)); ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  // x labels: first / middle / last time
+  ctx.fillStyle = ink3; ctx.textAlign = "center";
+  [0, Math.floor(cs.length / 2), cs.length - 1].forEach(i =>
+    ctx.fillText(cs[i].t, Math.min(Math.max(x(i), 18), W - padR - 14), H - 5));
+
+  // crosshair
+  if (hoverX !== null) {
+    const i = Math.max(0, Math.min(cs.length - 1,
+      Math.round((hoverX - padL) / pw * cs.length - .5)));
+    ctx.strokeStyle = ink2; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(x(i), padT); ctx.lineTo(x(i), padT + ph); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.arc(x(i), y(cs[i].c), 3, 0, 7); ctx.fill();
+    const c = cs[i];
+    tip.style.display = "block";
+    tip.innerHTML = `<b>${c.t}</b> O ${c.o.toFixed(2)} H ${c.h.toFixed(2)} L ${c.l.toFixed(2)} C ${c.c.toFixed(2)}`;
+    const wrap = canvas.parentElement.getBoundingClientRect();
+    let tx = x(i) + 14; if (tx + tip.offsetWidth > wrap.width - 8) tx = x(i) - tip.offsetWidth - 14;
+    tip.style.left = tx + "px"; tip.style.top = Math.max(4, y(c.c) - 28) + "px";
+  } else tip.style.display = "none";
+}
+
+const eqcanvas = $("eqchart"), eqtip = $("eqtip");
+let eqHoverX = null;
+
+function drawEquity() {
+  if (view !== "analytics") return;
+  const pts = S.analytics ? S.analytics.curve : [];
+  const { ctx, W, H } = setupCanvas(eqcanvas);
+  const ink = cssVar("--ink"), ink2 = cssVar("--ink2"), ink3 = cssVar("--ink3"),
+        line = cssVar("--line");
+  ctx.clearRect(0, 0, W, H);
+  if (!pts.length) {
+    ctx.fillStyle = ink3; ctx.font = "12px monospace"; ctx.textAlign = "center";
+    ctx.fillText("equity curve appears after the first closed trade", W / 2, H / 2);
+    return;
+  }
+  const padL = 6, padR = 64, padT = 10, padB = 18;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  const vals = pts.map(p => p.cum).concat([0]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = (hi - lo) || 1; lo -= span * .06; hi += span * .06;
+  const x = i => padL + (pts.length === 1 ? .5 : i / (pts.length - 1)) * pw;
+  const y = v => padT + (hi - v) / (hi - lo) * ph;
+
+  // grid + labels
+  ctx.strokeStyle = line; ctx.fillStyle = ink3;
+  ctx.font = "10px monospace"; ctx.textAlign = "left"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) {
+    const v = lo + (hi - lo) * i / 3, yy = y(v);
+    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
+    ctx.fillText("$" + Math.round(v), W - padR + 6, yy + 3);
+  }
+  // zero baseline, slightly stronger
+  ctx.strokeStyle = ink3; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(padL, y(0)); ctx.lineTo(W - padR, y(0)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // stepped equity line
+  ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(x(0), y(0));
+  pts.forEach((p, i) => ctx.lineTo(x(i), y(p.cum)));
+  ctx.stroke();
+  // trade markers
+  ctx.fillStyle = ink2;
+  pts.forEach((p, i) => { ctx.beginPath(); ctx.arc(x(i), y(p.cum), 2, 0, 7); ctx.fill(); });
+
+  // first/last date labels
+  ctx.fillStyle = ink3; ctx.textAlign = "center";
+  ctx.fillText(pts[0].t, Math.max(padL + 24, x(0)), H - 5);
+  if (pts.length > 1) ctx.fillText(pts[pts.length - 1].t, Math.min(x(pts.length - 1), W - padR - 24), H - 5);
+
+  // hover
+  if (eqHoverX !== null) {
+    const i = Math.max(0, Math.min(pts.length - 1,
+      Math.round((eqHoverX - padL) / pw * (pts.length - 1))));
+    ctx.strokeStyle = ink2; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(x(i), padT); ctx.lineTo(x(i), padT + ph); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.arc(x(i), y(pts[i].cum), 3.5, 0, 7); ctx.fill();
+    eqtip.style.display = "block";
+    eqtip.innerHTML = `<b>${pts[i].t}</b> trade ${money(pts[i].pnl)} &middot; total ${money(pts[i].cum)}`;
+    const wrap = eqcanvas.parentElement.getBoundingClientRect();
+    let tx = x(i) + 14; if (tx + eqtip.offsetWidth > wrap.width - 8) tx = x(i) - eqtip.offsetWidth - 14;
+    eqtip.style.left = tx + "px"; eqtip.style.top = Math.max(4, y(pts[i].cum) - 28) + "px";
+  } else eqtip.style.display = "none";
+}
+
+canvas.addEventListener("mousemove", e => { hoverX = e.offsetX; drawChart(); });
+canvas.addEventListener("mouseleave", () => { hoverX = null; drawChart(); });
+eqcanvas.addEventListener("mousemove", e => { eqHoverX = e.offsetX; drawEquity(); });
+eqcanvas.addEventListener("mouseleave", () => { eqHoverX = null; drawEquity(); });
+window.addEventListener("resize", () => {
+  if (!S) return;
+  view === "session" ? drawChart() : drawEquity();
+});
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  drawChart(); if (S && view === "analytics") drawEquity();
+});
+</script>
+</body>
+</html>

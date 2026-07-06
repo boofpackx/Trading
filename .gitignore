@@ -1,0 +1,6 @@
+__pycache__/
+journal.*.jsonl
+*.pyc
+.env
+.pytest_cache/
+node_modules/
