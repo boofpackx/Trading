@@ -24,6 +24,14 @@ internal high/low.
 | Contract caps | 5 minis / 50 micros (Topstep 50K scaling) |
 | Execution | bot stages the trade; **you** click Confirm |
 
+## Live demo on GitHub Pages
+
+`docs/` holds a fully static build of the dashboard that replays a recorded
+sim session (setup → confirm → fill → exit) on a loop — no server needed.
+To publish it: **Settings → Pages → Deploy from a branch → `main` + `/docs`**,
+then it appears at `https://<user>.github.io/Trading/`. Regenerate the
+recording any time with `python tools/build_demo.py [seed]`.
+
 ## Quick start (simulation)
 
 ```bash

@@ -131,13 +131,29 @@ class BotRunner:
         g = self.exec.guardrails
         candles = self.nq_1m[-150:]
         staged = self.exec.staged
-        working_or_pos = self.exec.working or self.exec.position
-        overlay = staged or working_or_pos or (
-            self.engine.pending
-            if self.engine.pending
+        # chart overlay: staged setup > working order > open position > pending leg
+        if staged is not None:
+            overlay = self._setup_dict(staged)
+        elif self.exec.working is not None:
+            overlay = self._setup_dict(self.exec.working)
+        elif self.exec.position is not None:
+            p = self.exec.position
+            overlay = {
+                "kind": "position",
+                "direction": p.direction.value,
+                "entry": p.entry,
+                "stop": p.stop,
+                "target": p.target,
+                "ote_upper": p.entry,
+                "ote_lower": p.entry,
+            }
+        elif (
+            self.engine.pending is not None
             and self.engine.pending.state is SetupState.AWAITING_RETRACE
-            else None
-        )
+        ):
+            overlay = self._setup_dict(self.engine.pending)
+        else:
+            overlay = None
         return {
             "mode": self.s.mode if self.sim is None else "sim",
             "clock": self.clock.strftime("%H:%M:%S"),
@@ -148,7 +164,7 @@ class BotRunner:
                 for c in candles
             ],
             "setup": self._setup_dict(staged),
-            "pending_leg": self._setup_dict(overlay) if overlay is not staged else None,
+            "pending_leg": overlay if staged is None else None,
             "position": self._position_dict(),
             "stats": {
                 "pnl": round(self.exec.stats.pnl, 2),
@@ -167,6 +183,7 @@ class BotRunner:
         if s is None:
             return None
         return {
+            "kind": "setup",
             "id": s.id,
             "direction": s.direction.value,
             "state": s.state.value,
